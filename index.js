@@ -1,13 +1,15 @@
+```js
 require("dotenv").config();
 const fs = require("fs");
 const http = require("http");
-const { Client, GatewayIntentBits } = require("discord.js");
+const { Client, GatewayIntentBits, Partials } = require("discord.js");
 const { Shoukaku, Connectors } = require("shoukaku");
 
 /* ---------------------------
    Railway keep-alive
 --------------------------- */
-http.createServer((req, res) => res.end("VinRadio running")).listen(process.env.PORT || 3000);
+http.createServer((req, res) => res.end("VinRadio running"))
+.listen(process.env.PORT || 3000);
 
 /* ---------------------------
    Discord Client
@@ -18,7 +20,8 @@ const client = new Client({
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
-  ]
+  ],
+  partials: [Partials.Channel]
 });
 
 /* ---------------------------
@@ -35,14 +38,18 @@ const nodes = [
 
 const shoukaku = new Shoukaku(
   new Connectors.DiscordJS(client),
-  nodes
+  nodes,
+  {
+    moveOnDisconnect: false,
+    reconnectTries: 3,
+    reconnectInterval: 2000,
+    restTimeout: 10000
+  }
 );
 
 shoukaku.on("debug", (name, info) => {
   console.log(`[Lavalink ${name}] ${info}`);
 });
-
-/* Lavalink events */
 
 shoukaku.on("ready", (name) => {
   console.log(`Connected to Lavalink node: ${name}`);
@@ -71,8 +78,6 @@ client.once("clientReady", async () => {
 
   console.log(`VinRadio online as ${client.user.tag}`);
 
-  /* auto reconnect radio */
-
   if (state.guildId && state.channelId) {
     try {
 
@@ -84,9 +89,9 @@ client.once("clientReady", async () => {
         shardId: 0
       });
 
-      const res = await connection.node.rest.resolve("ytmsearch:lofi hip hop radio");
+      const res = await connection.node.rest.resolve("ytsearch:lofi hip hop radio");
 
-      if (!res.data.length) return;
+      if (!res || !res.data || res.data.length === 0) return;
 
       const track = res.data[0];
 
@@ -131,17 +136,15 @@ client.on("messageCreate", async (message) => {
         shardId: 0
       });
 
-      /* save channel */
-
       state.guildId = message.guild.id;
       state.channelId = message.member.voice.channel.id;
 
       fs.writeFileSync("state.json", JSON.stringify(state));
 
-      const res = await connection.node.rest.resolve(`ytmsearch:${query}`);
+      const res = await connection.node.rest.resolve(`ytsearch:${query}`);
 
       if (!res || !res.data || res.data.length === 0) {
-          return message.reply("No results found.");
+        return message.reply("No results found.");
       }
 
       const track = res.data[0];
@@ -221,3 +224,4 @@ async function playNext(guildId, player) {
    Login
 --------------------------- */
 client.login(process.env.BOT_TOKEN);
+```
