@@ -28,7 +28,7 @@ const nodes = [
   {
     name: "railway",
     url: "lavalink:2333",
-    auth: "youshallnotpass"
+    auth: "vinradio"
   }
 ];
 
