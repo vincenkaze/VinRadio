@@ -36,6 +36,9 @@ const nodes = [
   }
 ];
 
+/* ---------------------------
+   Shoukaku
+--------------------------- */
 const shoukaku = new Shoukaku(
   new Connectors.DiscordJS(client),
   nodes,
@@ -47,16 +50,21 @@ const shoukaku = new Shoukaku(
   }
 );
 
+/* important for voice handshake */
+client.on("raw", (d) => shoukaku.connector.raw(d));
+
+/* Lavalink events */
+
 shoukaku.on("debug", (name, info) => {
-  console.log(`[Lavalink ${name}] ${info}`);
+  console.log("[Lavalink " + name + "] " + info);
 });
 
 shoukaku.on("ready", (name) => {
-  console.log(`Connected to Lavalink node: ${name}`);
+  console.log("Connected to Lavalink node: " + name);
 });
 
 shoukaku.on("error", (name, error) => {
-  console.error(`Lavalink node ${name} error:`, error);
+  console.error("Lavalink node " + name + " error:", error);
 });
 
 /* ---------------------------
@@ -76,7 +84,10 @@ try {
 --------------------------- */
 client.once("clientReady", async () => {
 
-  console.log(`VinRadio online as ${client.user.tag}`);
+  console.log("VinRadio online as " + client.user.tag);
+
+  /* wait a bit so Lavalink fully boots */
+  await new Promise(r => setTimeout(r, 5000));
 
   if (state.guildId && state.channelId) {
     try {
@@ -136,12 +147,14 @@ client.on("messageCreate", async (message) => {
         shardId: 0
       });
 
+      /* save channel for auto reconnect */
+
       state.guildId = message.guild.id;
       state.channelId = message.member.voice.channel.id;
 
       fs.writeFileSync("state.json", JSON.stringify(state));
 
-      const res = await connection.node.rest.resolve(`ytsearch:${query}`);
+      const res = await connection.node.rest.resolve("ytsearch:" + query);
 
       if (!res || !res.data || res.data.length === 0) {
         return message.reply("No results found.");
@@ -157,7 +170,7 @@ client.on("messageCreate", async (message) => {
 
       queue.push(track);
 
-      message.reply(`Added to queue: **${track.info.title}**`);
+      message.reply("Added to queue: **" + track.info.title + "**");
 
       if (queue.length === 1) {
         await playNext(message.guild.id, connection);
@@ -166,7 +179,6 @@ client.on("messageCreate", async (message) => {
       connection.on("end", async () => {
 
         const queue = queues.get(message.guild.id);
-
         if (!queue) return;
 
         queue.shift();
@@ -180,7 +192,6 @@ client.on("messageCreate", async (message) => {
     } catch (err) {
 
       console.error("Playback error:", err);
-
       message.reply("Playback failed.");
 
     }
@@ -209,7 +220,6 @@ client.on("messageCreate", async (message) => {
 async function playNext(guildId, player) {
 
   const queue = queues.get(guildId);
-
   if (!queue || queue.length === 0) return;
 
   const track = queue[0];
