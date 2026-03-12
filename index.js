@@ -27,7 +27,7 @@ const client = new Client({
 const nodes = [
   {
     name: "railway",
-    url: "lavalink.railway.internal:2333",
+    url: "lavalink:2333",
     auth: "vinradio"
   }
 ];
