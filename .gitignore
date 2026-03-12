@@ -1,3 +1,7 @@
 node_modules
 .env
-bot/lavalink/
+state.json
+
+bot/lavalink/Lavalink.jar
+bot/lavalink/plugins/
+*.log
