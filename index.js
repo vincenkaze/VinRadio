@@ -30,7 +30,7 @@ const nodes = [
     url: "lavalink.devamop.in:80",
     auth: "devamop"
   }
-];
+]; 
 
 const shoukaku = new Shoukaku(
   new Connectors.DiscordJS(client),
