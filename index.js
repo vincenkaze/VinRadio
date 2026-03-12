@@ -26,9 +26,9 @@ const client = new Client({
 --------------------------- */
 const nodes = [
   {
-    name: "public",
-    url: "lava.link:80",
-    auth: "anything"
+    name: "railway",
+    url: "lavalink.railway.internal:2333",
+    auth: "vinradio"
   }
 ]; 
 
