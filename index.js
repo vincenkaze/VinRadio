@@ -117,81 +117,20 @@ client.on("messageCreate", async (message) => {
 
   if (command === "!play") {
 
-  	const query = args.join(" ");
+    const query = args.join(" ");
 
-	if (!message.member.voice.channel) {
-		return message.reply("Join a voice channel first.");
-  	}
+    if (!message.member.voice.channel) {
+      return message.reply("Join a voice channel first.");
+    }
 
-	try {
+    try {
 
-    	let connection;
+      const connection = await shoukaku.joinVoiceChannel({
+        guildId: message.guild.id,
+        channelId: message.member.voice.channel.id,
+        shardId: 0
+      });
 
-    	/* reuse existing player instead of reconnecting */
-    	const existingPlayer = shoukaku.players.get(message.guild.id);
-
-    	if (existingPlayer) {
-      	connection = existingPlayer;
-    	} else {
-
-      	connection = await shoukaku.joinVoiceChannel({
-        	guildId: message.guild.id,
-	        channelId: message.member.voice.channel.id,
-	        shardId: 0
-	      });
-	
-	      /* save channel for auto reconnect */
-	      state.guildId = message.guild.id;
-	      state.channelId = message.member.voice.channel.id;
-	
-	      fs.writeFileSync("state.json", JSON.stringify(state));
-	
-	      /* attach end listener once */
-	      connection.on("end", async () => {
-	
-	        const queue = queues.get(message.guild.id);
-	        if (!queue) return;
-	
-	        queue.shift();
-	
-	        if (queue.length > 0) {
-	          await playNext(message.guild.id, connection);
-	        }
-	
-	      });
-	
-	    }
-	
-	    const res = await connection.node.rest.resolve(`ytmsearch:${query}`);
-	
-	    if (!res || !res.data || res.data.length === 0) {
-	      return message.reply("No results found.");
-	    }
-	
-	    const track = res.data[0];
-	
-	    if (!queues.has(message.guild.id)) {
-	      queues.set(message.guild.id, []);
-	    }
-	
-	    const queue = queues.get(message.guild.id);
-	
-	    queue.push(track);
-	
-	    message.reply(`Added to queue: **${track.info.title}**`);
-	
-	    if (queue.length === 1) {
-	      await playNext(message.guild.id, connection);
-	    }
-	
-	  } catch (err) {
-	
-	    console.error("Playback error:", err);
-	    message.reply("Playback failed.");
-	
-	  }
-	}
-	
       /* save channel */
 
       state.guildId = message.guild.id;
