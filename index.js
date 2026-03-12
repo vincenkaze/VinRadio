@@ -27,8 +27,9 @@ const client = new Client({
 const nodes = [
   {
     name: "railway",
-    url: "lavalink:2333",
-    auth: "vinradio"
+    url: "yamabiko.proxy.rlwy.net:17895",
+    auth: "vinradio",
+    secure: false
   }
 ];
 
