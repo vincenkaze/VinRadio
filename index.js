@@ -27,8 +27,9 @@ const client = new Client({
 const nodes = [
   {
     name: "lavalink",
-    url: "wss://lavalink.jirayu.net",
-    auth: "youshallnotpass"
+    url: "lavalink.jirayu.net:443",
+    auth: "youshallnotpass",
+    secure: true
   }
 ]; 
 
