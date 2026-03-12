@@ -84,7 +84,7 @@ client.once("clientReady", async () => {
         shardId: 0
       });
 
-      const res = await connection.node.rest.resolve("ytsearch:lofi hip hop radio");
+      const res = await connection.node.rest.resolve("ytmsearch:lofi hip hop radio");
 
       if (!res.data.length) return;
 
@@ -138,7 +138,7 @@ client.on("messageCreate", async (message) => {
 
       fs.writeFileSync("state.json", JSON.stringify(state));
 
-      const res = await connection.node.rest.resolve(`ytsearch:${query}`);
+      const res = await connection.node.rest.resolve(`ytmsearch:${query}`);
 
       if (!res.data.length) {
         return message.reply("No results found.");
