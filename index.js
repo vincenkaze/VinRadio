@@ -38,6 +38,10 @@ const shoukaku = new Shoukaku(
   nodes
 );
 
+shoukaku.on("debug", (name, info) => {
+  console.log(`[Lavalink ${name}] ${info}`);
+});
+
 /* Lavalink events */
 
 shoukaku.on("ready", (name) => {
