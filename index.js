@@ -26,9 +26,9 @@ const client = new Client({
 --------------------------- */
 const nodes = [
   {
-    name: "public",
-    url: "ws://lavalink.devamop.in:80",
-    auth: "devamop"
+    name: "lavalink",
+    url: "wss://lavalink.jirayu.net",
+    auth: "youshallnotpass"
   }
 ]; 
 
