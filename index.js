@@ -26,9 +26,9 @@ const client = new Client({
 --------------------------- */
 const nodes = [
   {
-    name: "local",
-    url: "localhost:2333",
-    auth: "vinradio"
+    name: "public",
+    url: "lavalink.devamop.in:80",
+    auth: "devamop"
   }
 ];
 
