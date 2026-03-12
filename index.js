@@ -140,8 +140,8 @@ client.on("messageCreate", async (message) => {
 
       const res = await connection.node.rest.resolve(`ytmsearch:${query}`);
 
-      if (!res.data.length) {
-        return message.reply("No results found.");
+      if (!res || !res.data || res.data.length === 0) {
+          return message.reply("No results found.");
       }
 
       const track = res.data[0];
