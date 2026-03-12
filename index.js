@@ -5,9 +5,9 @@ const { Client, GatewayIntentBits } = require("discord.js");
 const { Shoukaku, Connectors } = require("shoukaku");
 
 /* ---------------------------
-   Railway keep alive
+   Railway keep-alive
 --------------------------- */
-http.createServer((req,res)=>res.end("VinRadio running")).listen(process.env.PORT || 3000);
+http.createServer((req, res) => res.end("VinRadio running")).listen(process.env.PORT || 3000);
 
 /* ---------------------------
    Discord Client
@@ -22,7 +22,7 @@ const client = new Client({
 });
 
 /* ---------------------------
-   Lavalink
+   Lavalink Node
 --------------------------- */
 const nodes = [
   {
@@ -30,12 +30,18 @@ const nodes = [
     url: "lavalink.railway.internal:2333",
     auth: "vinradio"
   }
-]; 
+];
 
 const shoukaku = new Shoukaku(
   new Connectors.DiscordJS(client),
   nodes
 );
+
+/* Lavalink events */
+
+shoukaku.on("ready", (name) => {
+  console.log(`Connected to Lavalink node: ${name}`);
+});
 
 shoukaku.on("error", (name, error) => {
   console.error(`Lavalink node ${name} error:`, error);
@@ -45,7 +51,6 @@ shoukaku.on("error", (name, error) => {
    State
 --------------------------- */
 const queues = new Map();
-const volumes = new Map();
 
 let state = {};
 try {
@@ -58,9 +63,11 @@ try {
    Ready Event
 --------------------------- */
 client.once("clientReady", async () => {
+
   console.log(`VinRadio online as ${client.user.tag}`);
 
-  // auto reconnect
+  /* auto reconnect radio */
+
   if (state.guildId && state.channelId) {
     try {
 
@@ -72,7 +79,10 @@ client.once("clientReady", async () => {
         shardId: 0
       });
 
-      const res = await connection.node.rest.resolve(`ytsearch:lofi hip hop radio`);
+      const res = await connection.node.rest.resolve("ytsearch:lofi hip hop radio");
+
+      if (!res.data.length) return;
+
       const track = res.data[0];
 
       queues.set(state.guildId, [track]);
@@ -85,6 +95,7 @@ client.once("clientReady", async () => {
       console.error("Auto reconnect failed:", err);
     }
   }
+
 });
 
 /* ---------------------------
@@ -96,6 +107,8 @@ client.on("messageCreate", async (message) => {
 
   const args = message.content.trim().split(/ +/);
   const command = args.shift().toLowerCase();
+
+  /* PLAY */
 
   if (command === "!play") {
 
@@ -113,25 +126,27 @@ client.on("messageCreate", async (message) => {
         shardId: 0
       });
 
-      /* save channel for restart */
+      /* save channel */
+
       state.guildId = message.guild.id;
       state.channelId = message.member.voice.channel.id;
+
       fs.writeFileSync("state.json", JSON.stringify(state));
 
       const res = await connection.node.rest.resolve(`ytsearch:${query}`);
-      const tracks = res?.data || [];
 
-      if (!tracks.length) {
+      if (!res.data.length) {
         return message.reply("No results found.");
       }
 
-      const track = tracks[0];
+      const track = res.data[0];
 
       if (!queues.has(message.guild.id)) {
         queues.set(message.guild.id, []);
       }
 
       const queue = queues.get(message.guild.id);
+
       queue.push(track);
 
       message.reply(`Added to queue: **${track.info.title}**`);
@@ -141,7 +156,9 @@ client.on("messageCreate", async (message) => {
       }
 
       connection.on("end", async () => {
+
         const queue = queues.get(message.guild.id);
+
         if (!queue) return;
 
         queue.shift();
@@ -149,13 +166,19 @@ client.on("messageCreate", async (message) => {
         if (queue.length > 0) {
           await playNext(message.guild.id, connection);
         }
+
       });
 
     } catch (err) {
+
       console.error("Playback error:", err);
+
       message.reply("Playback failed.");
+
     }
   }
+
+  /* STOP */
 
   if (command === "!stop") {
 
@@ -169,6 +192,7 @@ client.on("messageCreate", async (message) => {
 
     message.reply("Stopped music.");
   }
+
 });
 
 /* ---------------------------
@@ -185,6 +209,7 @@ async function playNext(guildId, player) {
   await player.update({
     track: { encoded: track.encoded }
   });
+
 }
 
 /* ---------------------------
