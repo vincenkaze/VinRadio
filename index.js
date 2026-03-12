@@ -57,7 +57,7 @@ try {
 /* ---------------------------
    Ready Event
 --------------------------- */
-client.once("ready", async () => {
+client.once("clientReady", async () => {
   console.log(`VinRadio online as ${client.user.tag}`);
 
   // auto reconnect
