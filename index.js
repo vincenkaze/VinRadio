@@ -4,6 +4,7 @@ const http = require("http");
 const { Client, GatewayIntentBits } = require("discord.js");
 const { Shoukaku, Connectors } = require("shoukaku");
 const ytSearch = require("yt-search");
+let lavalinkReady = false;
 
 /* ---------------------------
 Railway keep-alive
@@ -40,6 +41,7 @@ const shoukaku = new Shoukaku(
 /* Lavalink events */
 shoukaku.on("ready", name => {
   console.log(`Connected to Lavalink node: ${name}`);
+  lavalinkReady = true;
 });
 
 shoukaku.on("error", (name, error) => {
@@ -144,6 +146,10 @@ client.on("messageCreate", async message => {
   const command = args.shift()?.toLowerCase();
 
   /* PLAY */
+
+  if (!lavalinkReady) {
+      return message.reply("Music system is still starting, try again in a moment.");
+  }
 
   if (command === "!play") {
 
