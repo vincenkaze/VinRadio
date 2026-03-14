@@ -5,6 +5,9 @@ server:
 lavalink:
   server:
     password: vinradio
+
+    playerUpdateInterval: 5
+
     sources:
       youtube: false
       soundcloud: true
@@ -12,6 +15,9 @@ lavalink:
       twitch: true
       vimeo: true
       http: true
+
+    bufferDurationMs: 400
+    frameBufferDurationMs: 5000
 
 plugins:
   - dependency: "dev.lavalink.youtube:youtube-plugin:1.11.2"
