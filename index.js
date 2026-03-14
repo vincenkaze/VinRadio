@@ -102,9 +102,10 @@ client.once("clientReady", async () => {
 
       const identifier = result.videos[0].url;
 
-      const res = await connection.node.rest.resolve(identifier);
+      const res = await player.node.rest.resolve(identifier);
+      console.log("Lavalink response:", res);
 
-      if (!res?.tracks?.length) {
+      if (!res || !res.tracks || res.tracks.length === 0) {
           return message.reply("No playable track found.");
       }
 
