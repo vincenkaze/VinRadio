@@ -69,13 +69,6 @@ State
 --------------------------- */
 const queues = new Map();
 
-let state = {};
-try {
-  state = JSON.parse(fs.readFileSync("state.json"));
-} catch {
-  state = {};
-}
-
 /* ---------------------------
 Ready Event
 --------------------------- */
@@ -118,46 +111,29 @@ client.on("messageCreate", async message => {
       let player = shoukaku.players.get(message.guild.id);
 
       if (!player) {
+
         player = await shoukaku.joinVoiceChannel({
           guildId: message.guild.id,
           channelId: message.member.voice.channel.id,
           shardId: 0,
           adapterCreator: message.guild.voiceAdapterCreator
         });
+
+        /* Attach queue handler once */
+        player.on("end", async () => {
+
+          const queue = queues.get(message.guild.id);
+          if (!queue) return;
+
+          queue.shift();
+
+          if (queue.length > 0) {
+            await playNext(message.guild.id, player);
+          }
+
+        });
+
       }
-
-      let player = shoukaku.players.get(message.guild.id);
-
-      if (!player) {
-          player = await shoukaku.joinVoiceChannel({
-          guildId: message.guild.id,
-          channelId: message.member.voice.channel.id,
-          shardId: 0,
-          adapterCreator: message.guild.voiceAdapterCreator
-      });
-
-      // 🔽 ADD THIS PART
-      player.on("end", async () => {
-
-      const queue = queues.get(message.guild.id);
- 
-      if (!queue) return;
-
-      // remove finished track
-      queue.shift();
-
-      if (queue.length > 0) {
-          await playNext(message.guild.id, player);
-      }
-
-   });
-}
-
-      /* Save voice channel */
-
-      state.guildId = message.guild.id;
-      state.channelId = message.member.voice.channel.id;
-      fs.writeFileSync("state.json", JSON.stringify(state));
 
       /* Detect URL vs search */
 
@@ -194,7 +170,7 @@ client.on("messageCreate", async message => {
         return message.reply("No playable track found.");
       }
 
-      /* Queue */
+      /* Queue system */
 
       if (!queues.has(message.guild.id)) {
         queues.set(message.guild.id, []);
