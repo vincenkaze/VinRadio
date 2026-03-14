@@ -104,12 +104,11 @@ client.once("clientReady", async () => {
 
       const res = await connection.node.rest.resolve(identifier);
 
-      if (!res?.data?.length) {
-          console.log("Lavalink returned no tracks");
-          return;
+      if (!res?.tracks?.length) {
+          return message.reply("No playable track found.");
       }
 
-      const track = res.data[0];
+      const track = res.tracks[0];
 
       queues.set(state.guildId, [track]);
 
