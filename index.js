@@ -38,6 +38,14 @@ const shoukaku = new Shoukaku(
   nodes
 );
 
+shoukaku.on("close", (name, code) => {
+  console.log(`Lavalink node ${name} closed with code ${code}`);
+});
+
+shoukaku.on("disconnect", (name) => {
+  console.log(`Lavalink node ${name} disconnected`);
+});
+
 /* Forward raw voice packets */
 client.on("raw", (packet) => {
   shoukaku.connector.raw(packet);
@@ -89,7 +97,7 @@ client.once("clientReady", async () => {
         adapterCreator: guild.voiceAdapterCreator
       });
 
-      const res = await connection.node.rest.resolve("ytmsearch:lofi hip hop radio");
+      const res = await connection.node.rest.resolve("ytsearch:lofi hip hop radio");
 
       if (!res.data.length) return;
 
@@ -148,7 +156,7 @@ client.on("messageCreate", async (message) => {
 
       fs.writeFileSync("state.json", JSON.stringify(state));
 
-      const res = await connection.node.rest.resolve(`ytmsearch:${query}`);
+      const res = await connection.node.rest.resolve(`ytsearch:${query}`);
 
       if (!res || !res.data || res.data.length === 0) {
         return message.reply("No results found.");
@@ -221,8 +229,13 @@ async function playNext(guildId, player) {
 
   const track = queue[0];
 
+  if (!player || !player.node || !player.node.sessionId) {
+  	console.log("Player not ready yet, skipping playNext");
+	return;
+  }
+
   await player.update({
-    track: { encoded: track.encoded }
+        track: { encoded: track.encoded }
   });
 
 }
