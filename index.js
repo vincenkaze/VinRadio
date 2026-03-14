@@ -103,13 +103,22 @@ client.once("clientReady", async () => {
       const identifier = result.videos[0].url;
 
       const res = await player.node.rest.resolve(identifier);
-      console.log("Lavalink response:", res);
 
-      if (!res || !res.tracks || res.tracks.length === 0) {
-          return message.reply("No playable track found.");
+      if (!res || res.loadType === "empty") {
+         return message.reply("No playable track found.");
       }
 
-      const track = res.tracks[0];
+      let track;
+
+      if (Array.isArray(res.data)) {
+         track = res.data[0];
+      } else {
+         track = res.data;
+        } 
+ 
+      if (!track) {
+          return message.reply("No playable track found.");
+      }
 
       queues.set(state.guildId, [track]);
 
