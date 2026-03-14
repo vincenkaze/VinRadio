@@ -58,6 +58,9 @@ const shoukaku = new Shoukaku(
     reconnectInterval: 10,
     restTimeout: 120,
     moveOnDisconnect: true,
+    retryWSOnClose: true,
+    voiceTimeout: 20000,     // 20 seconds
+    wsTimeout: 20000,        // WebSocket timeout
     structures: {
       player: {
         restVersion: "v4"
@@ -65,6 +68,7 @@ const shoukaku = new Shoukaku(
     }
   }
 );
+
 
 shoukaku.on("debug", (name, info) => {
   console.log(`[Lavalink ${name}] ${info}`);
