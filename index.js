@@ -24,43 +24,38 @@ const client = new Client({
 /* ---------------------------
 Lavalink Node
 --------------------------- */
-const nodes = [
-{
+const nodes = [{
   name: "railway",
   url: "yamabiko.proxy.rlwy.net:17895",
   auth: "vinradio",
   secure: false
-}
-];
+}];
 
 const shoukaku = new Shoukaku(
   new Connectors.DiscordJS(client),
   nodes
 );
 
-shoukaku.on("close", (name, code) => {
-  console.log(`Lavalink node ${name} closed with code ${code}`);
-});
-
-shoukaku.on("disconnect", (name) => {
-  console.log(`Lavalink node ${name} disconnected`);
-});
-
-/* Forward raw voice packets */
-client.on("raw", (packet) => {
-  shoukaku.connector.raw(packet);
-});
-
-shoukaku.on("debug", (name, info) => {
-  console.log(`[Lavalink ${name}] ${info}`);
-});
-
-shoukaku.on("ready", (name) => {
+/* Lavalink events */
+shoukaku.on("ready", name => {
   console.log(`Connected to Lavalink node: ${name}`);
 });
 
 shoukaku.on("error", (name, error) => {
   console.error(`Lavalink node ${name} error:`, error);
+});
+
+shoukaku.on("close", (name, code) => {
+  console.log(`Lavalink node ${name} closed with code ${code}`);
+});
+
+shoukaku.on("disconnect", name => {
+  console.log(`Lavalink node ${name} disconnected`);
+});
+
+/* Forward raw packets */
+client.on("raw", packet => {
+  shoukaku.connector.raw(packet);
 });
 
 /* ---------------------------
@@ -85,10 +80,10 @@ client.once("clientReady", async () => {
   if (state.guildId && state.channelId) {
     try {
 
-      console.log("Reconnecting to voice channel...");
-
       const guild = client.guilds.cache.get(state.guildId);
       if (!guild) return;
+
+      console.log("Reconnecting to voice channel...");
 
       const connection = await shoukaku.joinVoiceChannel({
         guildId: state.guildId,
@@ -100,7 +95,8 @@ client.once("clientReady", async () => {
       const res = await connection.node.rest.resolve("ytsearch:lofi hip hop radio");
 
       if (!res || !res.data || res.data.length === 0) {
-          return message.reply("No results found.");
+        console.log("Auto reconnect search returned nothing");
+        return;
       }
 
       const track = res.data[0];
@@ -121,12 +117,12 @@ client.once("clientReady", async () => {
 /* ---------------------------
 Commands
 --------------------------- */
-client.on("messageCreate", async (message) => {
+client.on("messageCreate", async message => {
 
   if (message.author.bot) return;
 
   const args = message.content.trim().split(/ +/);
-  const command = args.shift().toLowerCase();
+  const command = args.shift()?.toLowerCase();
 
   /* PLAY */
 
@@ -134,39 +130,44 @@ client.on("messageCreate", async (message) => {
 
     const query = args.join(" ");
 
+    if (!query) {
+      return message.reply("Provide a song name or URL.");
+    }
+
     if (!message.member.voice.channel) {
       return message.reply("Join a voice channel first.");
     }
 
     try {
 
-      let connection = shoukaku.players.get(message.guild.id);
+      let player = shoukaku.players.get(message.guild.id);
 
-      if (!connection) {
-          connection = await shoukaku.joinVoiceChannel({
-              guildId: message.guild.id,
-              channelId: message.member.voice.channel.id,
-              shardId: 0,
-              adapterCreator: message.guild.voiceAdapterCreator
-          });
+      if (!player) {
+        player = await shoukaku.joinVoiceChannel({
+          guildId: message.guild.id,
+          channelId: message.member.voice.channel.id,
+          shardId: 0,
+          adapterCreator: message.guild.voiceAdapterCreator
+        });
       }
 
-      /* save channel */
+      /* save voice channel */
 
       state.guildId = message.guild.id;
       state.channelId = message.member.voice.channel.id;
-
       fs.writeFileSync("state.json", JSON.stringify(state));
 
-      const identifier = query.startsWith("http")
-          ? query
-          : `ytsearch:${query}`;
+      /* detect URL vs search */
 
-      const res = await connection.node.rest.resolve(identifier);
+      const identifier = query.startsWith("http")
+        ? query
+        : `ytsearch:${query}`;
+
+      const res = await player.node.rest.resolve(identifier);
 
       if (!res || !res.data || res.data.length === 0) {
-  	 console.log("Search result:", res);
-  	 return message.reply("No results found from Lavalink.");
+        console.log("Lavalink search result:", res);
+        return message.reply("No results found.");
       }
 
       const track = res.data[0];
@@ -179,30 +180,15 @@ client.on("messageCreate", async (message) => {
 
       queue.push(track);
 
-      message.reply(`Added to queue: **${track.info.title}**`);
+      await message.reply(`Added to queue: **${track.info.title}**`);
 
       if (queue.length === 1) {
-        await playNext(message.guild.id, connection);
+        await playNext(message.guild.id, player);
       }
-
-      connection.on("end", async () => {
-
-        const queue = queues.get(message.guild.id);
-
-        if (!queue) return;
-
-        queue.shift();
-
-        if (queue.length > 0) {
-          await playNext(message.guild.id, connection);
-        }
-
-      });
 
     } catch (err) {
 
       console.error("Playback error:", err);
-
       message.reply("Playback failed.");
 
     }
@@ -231,19 +217,24 @@ Play Next Track
 async function playNext(guildId, player) {
 
   const queue = queues.get(guildId);
-
   if (!queue || queue.length === 0) return;
 
   const track = queue[0];
 
-  if (!player || !player.node || !player.node.sessionId) {
-  	console.log("Player not ready yet, skipping playNext");
-	return;
-  }
+  try {
 
-  await player.update({
-        track: { encoded: track.encoded }
-  });
+    if (!player || !player.node || !player.node.sessionId) {
+      console.log("Player not ready yet");
+      return;
+    }
+
+    await player.update({
+      track: { encoded: track.encoded }
+    });
+
+  } catch (err) {
+    console.error("Error playing track:", err);
+  }
 
 }
 
