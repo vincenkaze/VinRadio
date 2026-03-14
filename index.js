@@ -93,11 +93,20 @@ client.once("clientReady", async () => {
         adapterCreator: guild.voiceAdapterCreator
       });
 
-      const res = await connection.node.rest.resolve("ytsearch:lofi hip hop radio");
+      const result = await ytSearch("lofi hip hop radio");
 
-      if (!res || !res.data || res.data.length === 0) {
-        console.log("Auto reconnect search returned nothing");
-        return;
+      if (!result.videos.length) {
+          console.log("Auto reconnect search returned nothing");
+          return;
+      }
+
+      const identifier = result.videos[0].url;
+
+      const res = await connection.node.rest.resolve(identifier);
+
+      if (!res?.data?.length) {
+          console.log("Lavalink returned no tracks");
+          return;
       }
 
       const track = res.data[0];
@@ -175,9 +184,8 @@ client.on("messageCreate", async message => {
 
       const res = await player.node.rest.resolve(identifier);
 
-      if (!res || !res.data || res.data.length === 0) {
-        console.log("Lavalink search result:", res);
-        return message.reply("No results found.");
+      if (!res?.data?.length) {
+          return message.reply("No playable track found.");
       }
 
       const track = res.data[0];
@@ -238,9 +246,14 @@ async function playNext(guildId, player) {
       return;
     }
 
+    if (!track || !track.encoded) {
+      console.log("Invalid track object:", track);
+      return;
+    }
+
     await player.update({
-      track: { encoded: track.encoded }
-    });
+    track: { encoded: track.encoded }
+  });
 
   } catch (err) {
     console.error("Error playing track:", err);
