@@ -9,7 +9,7 @@ lavalink:
     playerUpdateInterval: 5
 
     sources:
-      youtube: true
+      youtube: false
       soundcloud: true
       bandcamp: true
       twitch: true
