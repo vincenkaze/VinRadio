@@ -6,7 +6,7 @@ lavalink:
   server:
     password: "vinradio"
     sources:
-      youtube: false
+      youtube: true
       soundcloud: true
       bandcamp: true
       twitch: true
@@ -14,5 +14,5 @@ lavalink:
       http: true
 
 plugins:
-  - dependency: "dev.lavalink.youtube:youtube-plugin:1.9.0"
+  - dependency: "dev.lavalink.youtube:youtube-plugin:1.11.2"
     repository: "https://maven.lavalink.dev/releases"
