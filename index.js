@@ -4,7 +4,6 @@ const http = require("http");
 const { Client, GatewayIntentBits } = require("discord.js");
 const { Shoukaku, Connectors } = require("shoukaku");
 const ytSearch = require("yt-search");
-let lavalinkReady = false;
 
 /* ---------------------------
 Railway keep-alive
@@ -38,7 +37,11 @@ const shoukaku = new Shoukaku(
   nodes
 );
 
-/* Lavalink events */
+let lavalinkReady = false;
+
+/* ---------------------------
+Lavalink Events
+--------------------------- */
 shoukaku.on("ready", name => {
   console.log(`Connected to Lavalink node: ${name}`);
   lavalinkReady = true;
@@ -56,7 +59,7 @@ shoukaku.on("disconnect", name => {
   console.log(`Lavalink node ${name} disconnected`);
 });
 
-/* Forward raw packets */
+/* Forward raw voice packets */
 client.on("raw", packet => {
   shoukaku.connector.raw(packet);
 });
@@ -76,63 +79,8 @@ try {
 /* ---------------------------
 Ready Event
 --------------------------- */
-client.once("clientReady", async () => {
-
+client.once("clientReady", () => {
   console.log(`VinRadio online as ${client.user.tag}`);
-
-  if (state.guildId && state.channelId) {
-    try {
-
-      const guild = client.guilds.cache.get(state.guildId);
-      if (!guild) return;
-
-      console.log("Reconnecting to voice channel...");
-
-      const connection = await shoukaku.joinVoiceChannel({
-        guildId: state.guildId,
-        channelId: state.channelId,
-        shardId: 0,
-        adapterCreator: guild.voiceAdapterCreator
-      });
-
-      const result = await ytSearch("lofi hip hop radio");
-
-      if (!result.videos.length) {
-          console.log("Auto reconnect search returned nothing");
-          return;
-      }
-
-      const identifier = result.videos[0].url;
-
-      const res = await player.node.rest.resolve(identifier);
-
-      if (!res || res.loadType === "empty") {
-         return message.reply("No playable track found.");
-      }
-
-      let track;
-
-      if (Array.isArray(res.data)) {
-         track = res.data[0];
-      } else {
-         track = res.data;
-        } 
- 
-      if (!track) {
-          return message.reply("No playable track found.");
-      }
-
-      queues.set(state.guildId, [track]);
-
-      await playNext(state.guildId, connection);
-
-      console.log("Radio resumed automatically");
-
-    } catch (err) {
-      console.error("Auto reconnect failed:", err);
-    }
-  }
-
 });
 
 /* ---------------------------
@@ -145,13 +93,15 @@ client.on("messageCreate", async message => {
   const args = message.content.trim().split(/ +/);
   const command = args.shift()?.toLowerCase();
 
-  /* PLAY */
-
-  if (!lavalinkReady) {
-      return message.reply("Music system is still starting, try again in a moment.");
-  }
+  /* ---------------------------
+  PLAY
+  --------------------------- */
 
   if (command === "!play") {
+
+    if (!lavalinkReady) {
+      return message.reply("Music system is starting. Try again in a moment.");
+    }
 
     const query = args.join(" ");
 
@@ -176,35 +126,48 @@ client.on("messageCreate", async message => {
         });
       }
 
-      /* save voice channel */
+      /* Save voice channel */
 
       state.guildId = message.guild.id;
       state.channelId = message.member.voice.channel.id;
       fs.writeFileSync("state.json", JSON.stringify(state));
 
-      /* detect URL vs search */
+      /* Detect URL vs search */
 
       let identifier = query;
 
       if (!query.startsWith("http")) {
 
-          const result = await ytSearch(query);
+        const result = await ytSearch(query);
 
-          if (!result.videos.length) {
-              return message.reply("No results found.");
-          }
+        if (!result.videos.length) {
+          return message.reply("No results found.");
+        }
 
-          identifier = result.videos[0].url;
+        identifier = result.videos[0].url;
       }
+
+      /* Resolve track */
 
       const res = await player.node.rest.resolve(identifier);
 
-      if (!res?.tracks?.length) {
-          console.log("No playable track found.");
-	  return;
+      if (!res || res.loadType === "empty") {
+        return message.reply("No playable track found.");
       }
 
-      const track = res.tracks[0];
+      let track;
+
+      if (Array.isArray(res.data)) {
+        track = res.data[0];
+      } else {
+        track = res.data;
+      }
+
+      if (!track) {
+        return message.reply("No playable track found.");
+      }
+
+      /* Queue */
 
       if (!queues.has(message.guild.id)) {
         queues.set(message.guild.id, []);
@@ -228,7 +191,9 @@ client.on("messageCreate", async message => {
     }
   }
 
-  /* STOP */
+  /* ---------------------------
+  STOP
+  --------------------------- */
 
   if (command === "!stop") {
 
@@ -251,25 +216,21 @@ Play Next Track
 async function playNext(guildId, player) {
 
   const queue = queues.get(guildId);
+
   if (!queue || queue.length === 0) return;
 
   const track = queue[0];
 
   try {
 
-    if (!player || !player.node || !player.node.sessionId) {
-      console.log("Player not ready yet");
-      return;
-    }
-
     if (!track || !track.encoded) {
-      console.log("Invalid track object:", track);
+      console.log("Invalid track:", track);
       return;
     }
 
     await player.update({
-    track: { encoded: track.encoded }
-  });
+      track: { encoded: track.encoded }
+    });
 
   } catch (err) {
     console.error("Error playing track:", err);
