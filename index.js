@@ -130,12 +130,16 @@ client.on("messageCreate", async (message) => {
 
     try {
 
-      const connection = await shoukaku.joinVoiceChannel({
-        guildId: message.guild.id,
-        channelId: message.member.voice.channel.id,
-        shardId: 0,
-        adapterCreator: message.guild.voiceAdapterCreator
-      });
+      let connection = shoukaku.players.get(message.guild.id);
+
+      if (!connection) {
+          connection = await shoukaku.joinVoiceChannel({
+              guildId: message.guild.id,
+              channelId: message.member.voice.channel.id,
+              shardId: 0,
+              adapterCreator: message.guild.voiceAdapterCreator
+          });
+      }
 
       /* save channel */
 
