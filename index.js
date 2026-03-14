@@ -32,15 +32,7 @@ const nodes = [
     secure: true,
     restVersion: "v4"
   },
-  {
-    name: "nextgen",
-    url: "publicnode.nextgencoders.xyz",
-    auth: "nextgencoders",
-    port: 2336,
-    secure: false,
-    restVersion: "v4"
-  },
-  {
+    {
     name: "railway",
     url: "yamabiko.proxy.rlwy.net:17895",
     auth: "vinradio",
