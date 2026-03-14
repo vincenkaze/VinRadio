@@ -3,6 +3,7 @@ const fs = require("fs");
 const http = require("http");
 const { Client, GatewayIntentBits } = require("discord.js");
 const { Shoukaku, Connectors } = require("shoukaku");
+const ytSearch = require("yt-search");
 
 /* ---------------------------
 Railway keep-alive
@@ -159,9 +160,18 @@ client.on("messageCreate", async message => {
 
       /* detect URL vs search */
 
-      const identifier = query.startsWith("http")
-        ? query
-        : `ytsearch:${query}`;
+      let identifier = query;
+
+      if (!query.startsWith("http")) {
+
+          const result = await ytSearch(query);
+
+          if (!result.videos.length) {
+              return message.reply("No results found.");
+          }
+
+          identifier = result.videos[0].url;
+      }
 
       const res = await player.node.rest.resolve(identifier);
 
