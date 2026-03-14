@@ -26,10 +26,10 @@ Lavalink Node
 --------------------------- */
 const nodes = [
 {
-name: "railway",
-url: "ws://yamabiko.proxy.rlwy.net:17895",
-auth: "vinradio",
-secure: false
+  name: "railway",
+  url: "yamabiko.proxy.rlwy.net:17895",
+  auth: "vinradio",
+  secure: false
 }
 ];
 
