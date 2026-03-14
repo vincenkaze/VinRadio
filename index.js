@@ -126,6 +126,33 @@ client.on("messageCreate", async message => {
         });
       }
 
+      let player = shoukaku.players.get(message.guild.id);
+
+      if (!player) {
+          player = await shoukaku.joinVoiceChannel({
+          guildId: message.guild.id,
+          channelId: message.member.voice.channel.id,
+          shardId: 0,
+          adapterCreator: message.guild.voiceAdapterCreator
+      });
+
+      // 🔽 ADD THIS PART
+      player.on("end", async () => {
+
+      const queue = queues.get(message.guild.id);
+ 
+      if (!queue) return;
+
+      // remove finished track
+      queue.shift();
+
+      if (queue.length > 0) {
+          await playNext(message.guild.id, player);
+      }
+
+   });
+}
+
       /* Save voice channel */
 
       state.guildId = message.guild.id;
