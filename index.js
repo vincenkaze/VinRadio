@@ -27,7 +27,8 @@ Lavalink Node
 const nodes = [
 {
 name: "railway",
-url: "yamabiko.proxy.rlwy.net:17895",
+host: "yamabiko.proxy.rlwy.net",
+port: 17895,
 auth: "vinradio",
 secure: false
 }
