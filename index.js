@@ -27,8 +27,7 @@ Lavalink Node
 const nodes = [
 {
 name: "railway",
-host: "yamabiko.proxy.rlwy.net",
-port: 17895,
+url: "ws://yamabiko.proxy.rlwy.net:17895",
 auth: "vinradio",
 secure: false
 }
@@ -38,6 +37,10 @@ const shoukaku = new Shoukaku(
 new Connectors.DiscordJS(client),
 nodes
 );
+
+client.on("raw", (packet) => {
+  shoukaku.connector.raw(packet);
+});
 
 shoukaku.on("debug", (name, info) => {
 console.log(`[Lavalink ${name}] ${info}`);
