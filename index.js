@@ -4,236 +4,123 @@ const http = require("http");
 const { Client, GatewayIntentBits } = require("discord.js");
 const { Shoukaku, Connectors } = require("shoukaku");
 
-/* ---------------------------
-   Railway keep-alive
---------------------------- */
-http.createServer((req, res) => res.end("VinRadio running")).listen(process.env.PORT || 3000);
+// Railway Keep-alive
+http.createServer((req, res) => res.end("VinRadio active")).listen(process.env.PORT || 3000);
 
-/* ---------------------------
-   Discord Client
---------------------------- */
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
-  ]
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent
+    ]
 });
 
-/* ---------------------------
-   Lavalink Nodes (Multi-node for reliability)
---------------------------- */
 const nodes = [
-  {
-    name: "lavasrc",
-    url: "lavalink.dev:2333",  // Public v4 + LavaSrc (ytmsearch works)
-    auth: "youshallnotpass",
-    secure: false
-  },
-  {
-    name: "railway",
-    url: "yamabiko.proxy.rlwy.net:17895",
-    auth: "vinradio",
-    secure: false
-  }
+    { name: "Railway-Internal", url: "yamabiko.proxy.rlwy.net:17895", auth: "vinradio", secure: false },
+    { name: "Public-Backup", url: "lavalink.dev:2333", auth: "youshallnotpass", secure: false }
 ];
 
-const shoukaku = new Shoukaku(
-  new Connectors.DiscordJS(client),
-  nodes,
-  {
+const shoukaku = new Shoukaku(new Connectors.DiscordJS(client), nodes, {
     resume: true,
-    resumeTimeout: 30,
-    reconnectTries: 5,
-    reconnectInterval: 10,
-    restTimeout: 120,
+    resumeTimeout: 60,
+    reconnectTries: 10,
     moveOnDisconnect: true
-  }
-);
-
-shoukaku.on("debug", (name, info) => {
-  console.log(`[Lavalink ${name}] ${info}`);
 });
 
-shoukaku.on("ready", (name) => {
-  console.log(`Connected to Lavalink node: ${name}`);
-});
-
-shoukaku.on("error", (name, error) => {
-  console.error(`Lavalink node ${name} error:`, error);
-});
-
-/* ---------------------------
-   State
---------------------------- */
 const queues = new Map();
 
-let state = {};
-try {
-  state = JSON.parse(fs.readFileSync("state.json"));
-} catch {
-  state = {};
-}
-
 /* ---------------------------
-   Ready Event
+   Correct Ready Event
 --------------------------- */
-client.once("clientReady", async () => {
-  console.log(`VinRadio online as ${client.user.tag}`);
+client.on("ready", async () => {
+    console.log(`✅ ${client.user.tag} is online`);
 
-  /* auto reconnect radio */
-  if (state.guildId && state.channelId && !shoukaku.players.has(state.guildId)) {
+    // Load state safely
+    let state = {};
     try {
-      console.log("Reconnecting to voice channel...");
-      const connection = await shoukaku.joinVoiceChannel({
-        guildId: state.guildId,
-        channelId: state.channelId,
-        shardId: 0
-      });
+        state = JSON.parse(fs.readFileSync("state.json", "utf8"));
+    } catch (e) { return; }
 
-      const res = await connection.node.rest.resolve("ytmsearch:lofi hip hop radio");
-      console.log("Auto-resolve:", res?.data?.[0]?.info?.title || "No track");
-      
-      if (!res?.data?.length) return;
-
-      const track = res.data[0];
-      queues.set(state.guildId, [track]);
-      await playNext(state.guildId, connection);
-      console.log("Radio resumed automatically");
-    } catch (err) {
-      console.error("Auto reconnect failed:", err);
+    if (state.guildId && state.channelId) {
+        console.log("🔄 Auto-restarting 24/7 Radio...");
+        const player = await shoukaku.joinVoiceChannel({
+            guildId: state.guildId,
+            channelId: state.channelId,
+            shardId: 0
+        });
+        await playMusic(state.guildId, player, "lofi hip hop radio");
     }
-  }
 });
 
 /* ---------------------------
-   Commands
+   Improved Play Logic
 --------------------------- */
-client.on("messageCreate", async (message) => {
-  if (message.author.bot) return;
+async function playMusic(guildId, player, query, isAuto = false) {
+    const res = await player.node.rest.resolve(`ytsearch:${query}`);
+    if (!res?.data?.length) return;
 
-  const args = message.content.trim().split(/ +/);
-  const command = args.shift().toLowerCase();
-
-  /* PLAY */
-  if (command === "!play") {
-    const query = args.join(" ");
-    if (!message.member?.voice?.channel) {
-      return message.reply("❌ Join a voice channel first.");
+    const track = res.data[0];
+    
+    if (!queues.has(guildId)) queues.set(guildId, []);
+    const queue = queues.get(guildId);
+    
+    queue.push(track);
+    
+    // Only play immediately if the queue was empty
+    if (queue.length === 1) {
+        await player.playTrack({ track: track.encoded });
     }
-    if (!query) {
-      return message.reply("❌ Provide a song! `!play lofi hip hop radio`");
+}
+
+shoukaku.on("trackEnd", async (player) => {
+    const queue = queues.get(player.guildId);
+    if (!queue) return;
+
+    queue.shift();
+
+    if (queue.length > 0) {
+        await player.playTrack({ track: queue[0].encoded });
+    } else {
+        // 24/7 Mode: If queue is empty, restart the lofi stream
+        console.log("Empty queue, looping lofi...");
+        await playMusic(player.guildId, player, "lofi hip hop radio");
     }
+});
 
-    try {
-      let player = shoukaku.players.get(message.guild.id);
+/* ---------------------------
+   Simple Command Handler
+--------------------------- */
+client.on("messageCreate", async (msg) => {
+    if (msg.author.bot || !msg.content.startsWith("!")) return;
+    const [cmd, ...args] = msg.content.slice(1).split(/\s+/);
 
-      // If no player, create connection
-      if (!player) {
-        player = await shoukaku.joinVoiceChannel({
-          guildId: message.guild.id,
-          channelId: message.member.voice.channel.id,
-          shardId: 0
+    if (cmd === "play") {
+        const vc = msg.member?.voice.channel;
+        if (!vc) return msg.reply("Join a VC!");
+
+        const player = await shoukaku.joinVoiceChannel({
+            guildId: msg.guild.id,
+            channelId: vc.id,
+            shardId: 0
         });
 
-        // Save state
-        state.guildId = message.guild.id;
-        state.channelId = message.member.voice.channel.id;
-        fs.writeFileSync("state.json", JSON.stringify(state));
-        console.log(`New connection: ${message.guild.id}`);
-      } else if (player.channelId !== message.member.voice.channel.id) {
-        // Switch channel
-        await player.setVoiceChannel(message.member.voice.channel.id);
-        message.reply("🔄 Switched channel—adding to queue.");
-      } else {
-        message.reply("✅ Already connected—adding to queue.");
-      }
-
-      // Try ytmsearch first, fallback to ytsearch
-      let res = await player.node.rest.resolve(`ytmsearch:${query}`);
-      if (!res?.data?.length) {
-        console.log(`ytmsearch failed for "${query}", trying ytsearch`);
-        res = await player.node.rest.resolve(`ytsearch:${query}`);
-      }
-      
-      if (!res?.data?.length) {
-        return message.reply("❌ No results found. Try different keywords.");
-      }
-
-      const track = res.data[0];
-
-      if (!queues.has(message.guild.id)) {
-        queues.set(message.guild.id, []);
-      }
-      const queue = queues.get(message.guild.id);
-      queue.push(track);
-
-      message.reply(`➕ Added: **${track.info.title}** (${track.info.author})`);
-
-      if (queue.length === 1) {
-        await playNext(message.guild.id, player);
-      }
-
-    } catch (err) {
-      console.error("Playback error:", err);
-      message.reply("❌ Playback failed. Check logs.");
+        // Save state for Railway restarts
+        fs.writeFileSync("state.json", JSON.stringify({ guildId: msg.guild.id, channelId: vc.id }));
+        
+        await playMusic(msg.guild.id, player, args.join(" ") || "lofi hip hop radio");
+        msg.reply("🎶 Added to queue.");
     }
-  }
 
-  /* STOP */
-  if (command === "!stop") {
-    const player = shoukaku.players.get(message.guild.id);
-    if (!player) return message.reply("❌ Nothing playing.");
-
-    queues.delete(message.guild.id);
-    state = {};
-    fs.writeFileSync("state.json", JSON.stringify(state));
-    await player.disconnect();
-    message.reply("⏹️ Stopped & disconnected.");
-  }
-
-  /* TEST (debug - remove later) */
-  if (command === "!test") {
-    const player = shoukaku.players.get(message.guild.id);
-    if (!player) return message.reply("No player.");
-    const res = await player.node.rest.resolve("ytsearch:test");
-    message.reply(`Test: ${res?.data?.length || 0} results`);
-    console.log("TEST RES:", res?.data?.[0]);
-  }
+    if (cmd === "stop") {
+        const player = shoukaku.players.get(msg.guild.id);
+        if (player) {
+            queues.delete(msg.guild.id);
+            try { fs.unlinkSync("state.json"); } catch(e) {}
+            await player.disconnect();
+            msg.reply("Stopped.");
+        }
+    }
 });
 
-/* ---------------------------
-   Track End Handler (Global)
---------------------------- */
-shoukaku.on("playerEnd", async (player) => {
-  const guildId = player.guildId;
-  const queue = queues.get(guildId);
-  if (!queue?.length) return;
-
-  queue.shift();
-  if (queue.length > 0) {
-    await playNext(guildId, player);
-  }
-});
-
-/* ---------------------------
-   Play Next Track
---------------------------- */
-async function playNext(guildId, player) {
-  const queue = queues.get(guildId);
-  if (!queue?.length) return;
-
-  const track = queue[0];
-  try {
-    await player.playTrack({ track: track.encoded });
-    console.log(`Playing: ${track.info.title}`);
-  } catch (err) {
-    console.error("PlayNext error:", err);
-  }
-}
-
-/* ---------------------------
-   Login
---------------------------- */
 client.login(process.env.BOT_TOKEN);
