@@ -4,7 +4,7 @@ server:
 
 lavalink:
   server:
-    password: "vinradio"
+    password: vinradio
     sources:
       youtube: false
       soundcloud: true
