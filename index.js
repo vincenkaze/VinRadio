@@ -160,22 +160,15 @@ client.on("messageCreate", async message => {
 
       let track;
 
-      if (!res || res.loadType === "empty") {
-          return message.reply("No playable track found.");
+      if (Array.isArray(res.data)) {
+        track = res.data[0];
+      } else {
+        track = res.data;
       }
 
-      if (res.loadType === "playlist") {
-          track = res.data.tracks[0];
+      if (!track) {
+        return message.reply("No playable track found.");
       }
-
-      else if (Array.isArray(res.data)) {
-          track = res.data[0];
-      }
-
-      else {
-          track = res.data;
-      }
-
 
       /* Queue system */
 
