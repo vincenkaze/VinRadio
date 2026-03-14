@@ -22,17 +22,16 @@ const client = new Client({
 });
 
 /* ---------------------------
-   Reliable Lavalink v4 Nodes
+   Lavalink Nodes (Multi-node for reliability)
 --------------------------- */
 const nodes = [
   {
-    name: "scarlettx",
-    url: "lava-v4.ajieblogs.eu.org",
-    auth: "https://dsc.gg/ajidevserver",
-    secure: true,
-    restVersion: "v4"
+    name: "lavasrc",
+    url: "lavalink.dev:2333",  // Public v4 + LavaSrc (ytmsearch works)
+    auth: "youshallnotpass",
+    secure: false
   },
-    {
+  {
     name: "railway",
     url: "yamabiko.proxy.rlwy.net:17895",
     auth: "vinradio",
@@ -49,33 +48,24 @@ const shoukaku = new Shoukaku(
     reconnectTries: 5,
     reconnectInterval: 10,
     restTimeout: 120,
-    moveOnDisconnect: true,
-    retryWSOnClose: true,
-    voiceTimeout: 20000,     // 20 seconds
-    wsTimeout: 20000,        // WebSocket timeout
-    structures: {
-      player: {
-        restVersion: "v4"
-      }
-    }
+    moveOnDisconnect: true
   }
 );
-
 
 shoukaku.on("debug", (name, info) => {
   console.log(`[Lavalink ${name}] ${info}`);
 });
 
 shoukaku.on("ready", (name) => {
-  console.log(`✅ Connected to Lavalink node: ${name}`);
+  console.log(`Connected to Lavalink node: ${name}`);
 });
 
 shoukaku.on("error", (name, error) => {
-  console.error(`❌ Lavalink node ${name} error:`, error);
+  console.error(`Lavalink node ${name} error:`, error);
 });
 
 /* ---------------------------
-   State & Queue
+   State
 --------------------------- */
 const queues = new Map();
 
@@ -87,14 +77,15 @@ try {
 }
 
 /* ---------------------------
-   Ready Event - Auto Resume
+   Ready Event
 --------------------------- */
 client.once("clientReady", async () => {
-  console.log(`🎵 VinRadio online as ${client.user.tag}`);
+  console.log(`VinRadio online as ${client.user.tag}`);
 
+  /* auto reconnect radio */
   if (state.guildId && state.channelId && !shoukaku.players.has(state.guildId)) {
     try {
-      console.log("🔄 Reconnecting to voice channel...");
+      console.log("Reconnecting to voice channel...");
       const connection = await shoukaku.joinVoiceChannel({
         guildId: state.guildId,
         channelId: state.channelId,
@@ -102,14 +93,14 @@ client.once("clientReady", async () => {
       });
 
       const res = await connection.node.rest.resolve("ytmsearch:lofi hip hop radio");
-      console.log("Auto-resume track:", res?.data?.[0]?.info?.title || "Failed");
+      console.log("Auto-resolve:", res?.data?.[0]?.info?.title || "No track");
       
-      if (res?.data?.length) {
-        const track = res.data[0];
-        queues.set(state.guildId, [track]);
-        await playNext(state.guildId, connection);
-        console.log("✅ Radio resumed!");
-      }
+      if (!res?.data?.length) return;
+
+      const track = res.data[0];
+      queues.set(state.guildId, [track]);
+      await playNext(state.guildId, connection);
+      console.log("Radio resumed automatically");
     } catch (err) {
       console.error("Auto reconnect failed:", err);
     }
@@ -125,89 +116,95 @@ client.on("messageCreate", async (message) => {
   const args = message.content.trim().split(/ +/);
   const command = args.shift().toLowerCase();
 
-  // !play <song>
+  /* PLAY */
   if (command === "!play") {
     const query = args.join(" ");
     if (!message.member?.voice?.channel) {
-      return message.reply("❌ **Join a voice channel first!**");
+      return message.reply("❌ Join a voice channel first.");
     }
     if (!query) {
-      return message.reply("❌ **Usage:** `!play gangnam style`");
+      return message.reply("❌ Provide a song! `!play lofi hip hop radio`");
     }
 
     try {
       let player = shoukaku.players.get(message.guild.id);
 
+      // If no player, create connection
       if (!player) {
         player = await shoukaku.joinVoiceChannel({
           guildId: message.guild.id,
           channelId: message.member.voice.channel.id,
           shardId: 0
         });
+
+        // Save state
         state.guildId = message.guild.id;
         state.channelId = message.member.voice.channel.id;
         fs.writeFileSync("state.json", JSON.stringify(state));
-        console.log(`🎤 New connection: ${message.guild.id} → ${player.node.name}`);
+        console.log(`New connection: ${message.guild.id}`);
       } else if (player.channelId !== message.member.voice.channel.id) {
+        // Switch channel
         await player.setVoiceChannel(message.member.voice.channel.id);
-        message.reply("🔄 **Switched channel** - adding to queue.");
+        message.reply("🔄 Switched channel—adding to queue.");
       } else {
-        message.reply("✅ **Connected** - adding to queue.");
+        message.reply("✅ Already connected—adding to queue.");
       }
 
-      // Search with fallback
+      // Try ytmsearch first, fallback to ytsearch
       let res = await player.node.rest.resolve(`ytmsearch:${query}`);
       if (!res?.data?.length) {
+        console.log(`ytmsearch failed for "${query}", trying ytsearch`);
         res = await player.node.rest.resolve(`ytsearch:${query}`);
       }
       
-      console.log(`Search "${query}" on ${player.node.name}:`, res?.data?.length || 0, "results");
-      
       if (!res?.data?.length) {
-        return message.reply("❌ **No results.** Try different words!");
+        return message.reply("❌ No results found. Try different keywords.");
       }
 
       const track = res.data[0];
-      if (!queues.has(message.guild.id)) queues.set(message.guild.id, []);
-      queues.get(message.guild.id).push(track);
 
-      message.reply(`➕ **Added:** ${track.info.title}\n👤 **${track.info.author}**`);
+      if (!queues.has(message.guild.id)) {
+        queues.set(message.guild.id, []);
+      }
+      const queue = queues.get(message.guild.id);
+      queue.push(track);
 
-      if (queues.get(message.guild.id).length === 1) {
+      message.reply(`➕ Added: **${track.info.title}** (${track.info.author})`);
+
+      if (queue.length === 1) {
         await playNext(message.guild.id, player);
       }
 
     } catch (err) {
-      console.error("❌ Play error:", err);
-      message.reply("❌ **Failed to play.** Check console.");
+      console.error("Playback error:", err);
+      message.reply("❌ Playback failed. Check logs.");
     }
   }
 
-  // !stop
+  /* STOP */
   if (command === "!stop") {
     const player = shoukaku.players.get(message.guild.id);
-    if (!player) return message.reply("❌ **Nothing playing.**");
+    if (!player) return message.reply("❌ Nothing playing.");
 
     queues.delete(message.guild.id);
     state = {};
     fs.writeFileSync("state.json", JSON.stringify(state));
     await player.disconnect();
-    message.reply("⏹️ **Stopped & disconnected.**");
+    message.reply("⏹️ Stopped & disconnected.");
   }
 
-  // !test (debug)
+  /* TEST (debug - remove later) */
   if (command === "!test") {
     const player = shoukaku.players.get(message.guild.id);
-    if (!player) return message.reply("❌ **No connection.**");
-    
-    const res = await player.node.rest.resolve("ytsearch:gangnam style");
-    message.reply(`🔍 **Node:** ${player.node.name}\n📊 **Results:** ${res?.data?.length || 0}`);
-    console.log("TEST:", player.node.name, res?.data?.[0]?.info?.title);
+    if (!player) return message.reply("No player.");
+    const res = await player.node.rest.resolve("ytsearch:test");
+    message.reply(`Test: ${res?.data?.length || 0} results`);
+    console.log("TEST RES:", res?.data?.[0]);
   }
 });
 
 /* ---------------------------
-   Global Track End
+   Track End Handler (Global)
 --------------------------- */
 shoukaku.on("playerEnd", async (player) => {
   const guildId = player.guildId;
@@ -221,7 +218,7 @@ shoukaku.on("playerEnd", async (player) => {
 });
 
 /* ---------------------------
-   Play Next
+   Play Next Track
 --------------------------- */
 async function playNext(guildId, player) {
   const queue = queues.get(guildId);
@@ -230,9 +227,9 @@ async function playNext(guildId, player) {
   const track = queue[0];
   try {
     await player.playTrack({ track: track.encoded });
-    console.log(`▶️ Playing "${track.info.title}" on ${player.node.name}`);
+    console.log(`Playing: ${track.info.title}`);
   } catch (err) {
-    console.error("PlayNext failed:", err);
+    console.error("PlayNext error:", err);
   }
 }
 
