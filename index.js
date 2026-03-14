@@ -22,9 +22,15 @@ const client = new Client({
 });
 
 /* ---------------------------
-   Lavalink Node
+   Lavalink Nodes (Multi-node for reliability)
 --------------------------- */
 const nodes = [
+  {
+    name: "lavasrc",
+    url: "lavalink.dev:2333",  // Public v4 + LavaSrc (ytmsearch works)
+    auth: "youshallnotpass",
+    secure: false
+  },
   {
     name: "railway",
     url: "yamabiko.proxy.rlwy.net:17895",
@@ -87,7 +93,9 @@ client.once("clientReady", async () => {
       });
 
       const res = await connection.node.rest.resolve("ytmsearch:lofi hip hop radio");
-      if (!res.data.length) return;
+      console.log("Auto-resolve:", res?.data?.[0]?.info?.title || "No track");
+      
+      if (!res?.data?.length) return;
 
       const track = res.data[0];
       queues.set(state.guildId, [track]);
@@ -112,10 +120,10 @@ client.on("messageCreate", async (message) => {
   if (command === "!play") {
     const query = args.join(" ");
     if (!message.member?.voice?.channel) {
-      return message.reply("Join a voice channel first.");
+      return message.reply("❌ Join a voice channel first.");
     }
     if (!query) {
-      return message.reply("Provide a song name. Example: `!play lofi hip hop radio`");
+      return message.reply("❌ Provide a song! `!play lofi hip hop radio`");
     }
 
     try {
@@ -133,17 +141,24 @@ client.on("messageCreate", async (message) => {
         state.guildId = message.guild.id;
         state.channelId = message.member.voice.channel.id;
         fs.writeFileSync("state.json", JSON.stringify(state));
+        console.log(`New connection: ${message.guild.id}`);
       } else if (player.channelId !== message.member.voice.channel.id) {
-        // Switch channel if different
+        // Switch channel
         await player.setVoiceChannel(message.member.voice.channel.id);
-        message.reply("Switched channel—adding to queue.");
+        message.reply("🔄 Switched channel—adding to queue.");
       } else {
-        message.reply("Already connected—adding to queue.");
+        message.reply("✅ Already connected—adding to queue.");
       }
 
-      const res = await player.node.rest.resolve(`ytmsearch:${query}`);
-      if (!res || !res.data?.length) {
-        return message.reply("No results found.");
+      // Try ytmsearch first, fallback to ytsearch
+      let res = await player.node.rest.resolve(`ytmsearch:${query}`);
+      if (!res?.data?.length) {
+        console.log(`ytmsearch failed for "${query}", trying ytsearch`);
+        res = await player.node.rest.resolve(`ytsearch:${query}`);
+      }
+      
+      if (!res?.data?.length) {
+        return message.reply("❌ No results found. Try different keywords.");
       }
 
       const track = res.data[0];
@@ -154,7 +169,7 @@ client.on("messageCreate", async (message) => {
       const queue = queues.get(message.guild.id);
       queue.push(track);
 
-      message.reply(`Added to queue: **${track.info.title}**`);
+      message.reply(`➕ Added: **${track.info.title}** (${track.info.author})`);
 
       if (queue.length === 1) {
         await playNext(message.guild.id, player);
@@ -162,20 +177,29 @@ client.on("messageCreate", async (message) => {
 
     } catch (err) {
       console.error("Playback error:", err);
-      message.reply("Playback failed.");
+      message.reply("❌ Playback failed. Check logs.");
     }
   }
 
   /* STOP */
   if (command === "!stop") {
     const player = shoukaku.players.get(message.guild.id);
-    if (!player) return message.reply("Nothing playing.");
+    if (!player) return message.reply("❌ Nothing playing.");
 
     queues.delete(message.guild.id);
-    state = {}; // Clear state
+    state = {};
     fs.writeFileSync("state.json", JSON.stringify(state));
     await player.disconnect();
-    message.reply("Stopped music.");
+    message.reply("⏹️ Stopped & disconnected.");
+  }
+
+  /* TEST (debug - remove later) */
+  if (command === "!test") {
+    const player = shoukaku.players.get(message.guild.id);
+    if (!player) return message.reply("No player.");
+    const res = await player.node.rest.resolve("ytsearch:test");
+    message.reply(`Test: ${res?.data?.length || 0} results`);
+    console.log("TEST RES:", res?.data?.[0]);
   }
 });
 
@@ -185,7 +209,7 @@ client.on("messageCreate", async (message) => {
 shoukaku.on("playerEnd", async (player) => {
   const guildId = player.guildId;
   const queue = queues.get(guildId);
-  if (!queue) return;
+  if (!queue?.length) return;
 
   queue.shift();
   if (queue.length > 0) {
@@ -198,10 +222,15 @@ shoukaku.on("playerEnd", async (player) => {
 --------------------------- */
 async function playNext(guildId, player) {
   const queue = queues.get(guildId);
-  if (!queue || queue.length === 0) return;
+  if (!queue?.length) return;
 
   const track = queue[0];
-  await player.playTrack({ track: track.encoded });
+  try {
+    await player.playTrack({ track: track.encoded });
+    console.log(`Playing: ${track.info.title}`);
+  } catch (err) {
+    console.error("PlayNext error:", err);
+  }
 }
 
 /* ---------------------------
