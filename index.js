@@ -99,7 +99,9 @@ client.once("clientReady", async () => {
 
       const res = await connection.node.rest.resolve("ytsearch:lofi hip hop radio");
 
-      if (!res.data.length) return;
+      if (!res || !res.data || res.data.length === 0) {
+          return message.reply("No results found.");
+      }
 
       const track = res.data[0];
 
@@ -156,10 +158,15 @@ client.on("messageCreate", async (message) => {
 
       fs.writeFileSync("state.json", JSON.stringify(state));
 
-      const res = await connection.node.rest.resolve(`ytsearch:${query}`);
+      const identifier = query.startsWith("http")
+          ? query
+          : `ytsearch:${query}`;
+
+      const res = await connection.node.rest.resolve(identifier);
 
       if (!res || !res.data || res.data.length === 0) {
-        return message.reply("No results found.");
+  	 console.log("Search result:", res);
+  	 return message.reply("No results found from Lavalink.");
       }
 
       const track = res.data[0];
