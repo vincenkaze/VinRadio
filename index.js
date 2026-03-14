@@ -183,11 +183,12 @@ client.on("messageCreate", async message => {
 
       const res = await player.node.rest.resolve(identifier);
 
-      if (!res?.data?.length) {
-          return message.reply("No playable track found.");
+      if (!res?.tracks?.length) {
+          console.log("No playable track found.");
+	  return;
       }
 
-      const track = res.data[0];
+      const track = res.tracks[0];
 
       if (!queues.has(message.guild.id)) {
         queues.set(message.guild.id, []);
