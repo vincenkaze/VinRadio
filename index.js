@@ -1,9 +1,18 @@
 require("dotenv").config();
 const fs = require("fs");
 const http = require("http");
+
 const { Client, GatewayIntentBits } = require("discord.js");
 const { Shoukaku, Connectors } = require("shoukaku");
 const ytSearch = require("yt-search");
+
+/* Prevent any unhandled error from crashing the bot */
+process.on("unhandledRejection", err => {
+  console.error("[Bot] Unhandled rejection:", err?.message || err);
+});
+process.on("uncaughtException", err => {
+  console.error("[Bot] Uncaught exception:", err?.message || err);
+});
 
 /* ---------------------------
 Keep-alive server
@@ -137,9 +146,34 @@ function setupPlayerEvents(player, guildId) {
   });
 
   player.on("exception", async exception => {
-    console.error(`[Player] Exception in ${guildId}:`, exception?.message || exception);
     const queue = queues.get(guildId);
     if (!queue) return;
+
+    const failedTrack = queue[0];
+    const isYoutube = failedTrack?.info?.sourceName === "youtube";
+
+    console.error(`[Player] Exception in ${guildId} [${isYoutube ? "youtube" : "other"}]:`, exception?.exception?.message || exception?.message || "unknown");
+
+    /* If YouTube cipher fails, retry same song via SoundCloud */
+    if (isYoutube) {
+      const searchQuery = `${failedTrack.info.author} ${failedTrack.info.title}`;
+      console.log(`[Fallback] YouTube failed — trying SoundCloud for: ${searchQuery}`);
+      try {
+        const res = await player.node.rest.resolve(`scsearch:${searchQuery}`);
+        if (res?.data?.length) {
+          const scTrack = Array.isArray(res.data) ? res.data[0] : res.data;
+          if (scTrack?.encoded) {
+            queue[0] = scTrack;
+            await player.update({ track: { encoded: scTrack.encoded } });
+            console.log(`[Fallback] Now playing via SoundCloud: ${scTrack.info?.title}`);
+            return;
+          }
+        }
+      } catch (e) {
+        console.error("[Fallback] SoundCloud fallback failed:", e.message);
+      }
+    }
+
     queue.shift();
     if (queue.length > 0) await playNext(guildId, player);
   });
@@ -316,7 +350,7 @@ client.on("messageCreate", async message => {
 
     queues.delete(message.guild.id);
     playerEventsSet.delete(message.guild.id);
-    await player.disconnect();
+    await shoukaku.leaveVoiceChannel(message.guild.id);
     message.reply("Stopped and disconnected.");
   }
 
