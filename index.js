@@ -49,6 +49,7 @@ const shoukaku = new Shoukaku(
 State
 --------------------------- */
 const queues = new Map();
+const playerEventsSet = new Set(); // track which guilds have player events attached
 
 let state = {};
 try {
@@ -104,6 +105,9 @@ client.on("raw", packet => {
 Player Event Setup
 --------------------------- */
 function setupPlayerEvents(player, guildId) {
+  if (playerEventsSet.has(guildId)) return; // already attached
+  playerEventsSet.add(guildId);
+
   player.on("end", async () => {
     const queue = queues.get(guildId);
     if (!queue) return;
@@ -129,6 +133,12 @@ function setupPlayerEvents(player, guildId) {
     if (!queue) return;
     queue.shift();
     if (queue.length > 0) await playNext(guildId, player);
+  });
+
+  player.on("closed", () => {
+    console.log(`[Player] Player closed for guild ${guildId}`);
+    playerEventsSet.delete(guildId);
+    queues.delete(guildId);
   });
 }
 
@@ -225,13 +235,25 @@ client.on("messageCreate", async message => {
       let player = shoukaku.players.get(message.guild.id);
 
       if (!player) {
-        player = await shoukaku.joinVoiceChannel({
-          guildId: message.guild.id,
-          channelId: message.member.voice.channel.id,
-          shardId: 0,
-          adapterCreator: message.guild.voiceAdapterCreator
-        });
-        setupPlayerEvents(player, message.guild.id);
+        try {
+          player = await shoukaku.joinVoiceChannel({
+            guildId: message.guild.id,
+            channelId: message.member.voice.channel.id,
+            shardId: 0,
+            adapterCreator: message.guild.voiceAdapterCreator
+          });
+          setupPlayerEvents(player, message.guild.id);
+        } catch (voiceErr) {
+          /* Shoukaku may time out waiting for the voice handshake even though
+             the player was created — check if it exists before giving up */
+          player = shoukaku.players.get(message.guild.id);
+          if (player) {
+            console.log("[Voice] Handshake timeout — player exists, continuing");
+            setupPlayerEvents(player, message.guild.id); // attach events missed due to timeout
+          } else {
+            throw voiceErr;
+          }
+        }
       }
 
       state.guildId = message.guild.id;
@@ -270,6 +292,7 @@ client.on("messageCreate", async message => {
     if (!player) return message.reply("Nothing is playing.");
 
     queues.delete(message.guild.id);
+    playerEventsSet.delete(message.guild.id);
     await player.disconnect();
     message.reply("Stopped and disconnected.");
   }
