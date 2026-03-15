@@ -9,17 +9,23 @@ const ytSearch = require("yt-search");
 Keep-alive server
 --------------------------- */
 const server = http.createServer((req, res) => res.end("VinRadio running"));
+const PORT = process.env.PORT || 5000;
+let httpRetries = 0;
+function startHttpServer() {
+  server.listen(PORT, () => {
+    console.log(`[HTTP] Keep-alive server running on port ${PORT}`);
+    httpRetries = 0;
+  });
+}
 server.on("error", err => {
-  if (err.code === "EADDRINUSE") {
-    console.log(`[HTTP] Port ${process.env.PORT || 5000} busy, retrying in 3s...`);
-    setTimeout(() => server.listen(process.env.PORT || 5000), 3000);
-  } else {
+  if (err.code === "EADDRINUSE" && httpRetries < 10) {
+    httpRetries++;
+    setTimeout(() => { server.close(); startHttpServer(); }, 3000);
+  } else if (err.code !== "EADDRINUSE") {
     console.error("[HTTP] Server error:", err.message);
   }
 });
-server.listen(process.env.PORT || 5000, () => {
-  console.log(`[HTTP] Keep-alive server running on port ${process.env.PORT || 5000}`);
-});
+startHttpServer();
 
 /* ---------------------------
 Discord Client
