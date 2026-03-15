@@ -38,10 +38,10 @@ const shoukaku = new Shoukaku(
   new Connectors.DiscordJS(client),
   nodes,
   {
-    reconnectTries: 20,
+    reconnectTries: 10,
     reconnectInterval: 5000,
     restTimeout: 15000,
-    moveOnDisconnect: false
+    moveOnDisconnect: true
   }
 );
 
@@ -49,7 +49,6 @@ const shoukaku = new Shoukaku(
 State
 --------------------------- */
 const queues = new Map();
-let lavalinkReady = false;
 
 let state = {};
 try {
@@ -58,12 +57,19 @@ try {
   state = {};
 }
 
+/* Check if at least one Lavalink node is connected */
+function isReady() {
+  for (const node of shoukaku.nodes.values()) {
+    if (node.state === 1) return true; // 1 = CONNECTED
+  }
+  return false;
+}
+
 /* ---------------------------
 Lavalink Events
 --------------------------- */
 shoukaku.on("ready", name => {
   console.log(`[Lavalink] Connected to node: ${name}`);
-  lavalinkReady = true;
 });
 
 shoukaku.on("error", (name, error) => {
@@ -71,14 +77,23 @@ shoukaku.on("error", (name, error) => {
 });
 
 shoukaku.on("close", (name, code) => {
-  console.log(`[Lavalink] Node ${name} closed (code: ${code})`);
-  lavalinkReady = false;
+  console.log(`[Lavalink] Node ${name} closed (code: ${code}) — ${isReady() ? "other nodes available" : "no nodes available"}`);
 });
 
 shoukaku.on("disconnect", name => {
-  console.log(`[Lavalink] Node ${name} disconnected — will retry...`);
-  lavalinkReady = false;
+  console.log(`[Lavalink] Node ${name} disconnected — ${isReady() ? "other nodes available" : "retrying..."}`);
 });
+
+/* Wait up to `timeout` ms for a node to become available */
+function waitForReady(timeout = 12000) {
+  if (isReady()) return Promise.resolve(true);
+  return new Promise(resolve => {
+    const iv = setInterval(() => {
+      if (isReady()) { clearInterval(iv); clearTimeout(t); resolve(true); }
+    }, 500);
+    const t = setTimeout(() => { clearInterval(iv); resolve(false); }, timeout);
+  });
+}
 
 /* Forward raw voice packets */
 client.on("raw", packet => {
@@ -195,7 +210,12 @@ client.on("messageCreate", async message => {
 
   /* ---- PLAY ---- */
   if (command === "!play") {
-    if (!lavalinkReady) return message.reply("Music system is reconnecting. Try again in a moment.");
+    if (!isReady()) {
+      const waiting = await message.reply("Connecting to music server, please wait...");
+      const ok = await waitForReady(12000);
+      if (!ok) return waiting.edit("Music server is unavailable right now. Try again in a moment.");
+      await waiting.delete().catch(() => {});
+    }
 
     const query = args.join(" ");
     if (!query) return message.reply("Usage: `!play <song name or URL>`");
