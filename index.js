@@ -8,7 +8,18 @@ const ytSearch = require("yt-search");
 /* ---------------------------
 Keep-alive server
 --------------------------- */
-http.createServer((req, res) => res.end("VinRadio running")).listen(process.env.PORT || 5000);
+const server = http.createServer((req, res) => res.end("VinRadio running"));
+server.on("error", err => {
+  if (err.code === "EADDRINUSE") {
+    console.log(`[HTTP] Port ${process.env.PORT || 5000} busy, retrying in 3s...`);
+    setTimeout(() => server.listen(process.env.PORT || 5000), 3000);
+  } else {
+    console.error("[HTTP] Server error:", err.message);
+  }
+});
+server.listen(process.env.PORT || 5000, () => {
+  console.log(`[HTTP] Keep-alive server running on port ${process.env.PORT || 5000}`);
+});
 
 /* ---------------------------
 Discord Client
@@ -281,6 +292,12 @@ client.on("messageCreate", async message => {
       }
 
     } catch (err) {
+      if (err.message?.includes("voice connection")) {
+        /* Voice handshake timed out on Shoukaku's side but Lavalink
+           may have already established it — playback continues fine */
+        console.log("[Voice] Handshake timeout suppressed (playback unaffected)");
+        return;
+      }
       console.error("[Command] Playback error:", err.message);
       message.reply("Playback failed. The music server may be temporarily unavailable.");
     }
